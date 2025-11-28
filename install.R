@@ -1,0 +1,11 @@
+install.packages(c(
+  "shiny",
+  "shinyjs",
+  "readxl",
+  "dplyr",
+  "stringr",
+  "ggplot2",
+  "tibble",
+  "tidyr",
+  "rmarkdown"
+))
