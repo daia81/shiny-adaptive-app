@@ -1,13 +1,13 @@
-FROM rocker/shiny:latest
+FROM rocker/r-base:4.3.2
 
-# Install R packages
-RUN R -e "install.packages(c('shiny','shinyjs','readxl','dplyr','stringr','ggplot2','tibble','tidyr','rmarkdown'))"
+# Installa i pacchetti R necessari
+RUN R -e "install.packages(c('shiny','shinyjs','readxl','dplyr','stringr','ggplot2','tibble','tidyr','rmarkdown'), repos='https://cloud.r-project.org')"
 
-# Copy app files
-COPY . /srv/shiny-server/
+# Copia l'app dentro il container
+WORKDIR /app
+COPY . /app
 
-# Expose port
-EXPOSE 8080
+# Render imposta la porta in $PORT: usiamola per Shiny
+ENV PORT=8080
 
-# Run Shiny app
-CMD ["/usr/bin/shiny-server"]
+CMD R -e "shiny::runApp('/app', host='0.0.0.0', port=as.numeric(Sys.getenv('PORT')))"
