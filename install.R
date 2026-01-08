@@ -7,5 +7,7 @@ install.packages(c(
   "ggplot2",
   "tibble",
   "tidyr",
-  "rmarkdown"
+  "rmarkdown",
+  "knitr"
 ))
+
