@@ -1,16 +1,18 @@
-# appLERS4.R ---------------------------------------------------------------
+# app.R ---------------------------------------------------------------
 # LERS Shiny (tree-driven routing -> 1 leaf -> ask beta vars -> score)
-# Output: Word report only in "single" mode + CSV always
+# Output: CSV only (Word removed)
 # BILINGUAL IT/EN:
 # - language selection page (ITALIANO / ENGLISH)
-# - UI + instructions + results note + scale definitions + report in selected language
+# - UI + instructions + results note + scale definitions in selected language
 # - items read from dictionary column Text_IT / Text_EN (fallback to IT if EN missing)
 #
-# FIX (2026-01): IRRIT_FS
+# FIX (2026-01): IRRIT_FS reverse-coding
 # - If IRRIT items were reverse-coded in the analyses / model building,
 #   we MUST reverse-code the app answers BEFORE using them for routing + scoring.
-#   This patch reverse-codes the selected response for IRRIT_FS at save-time,
-#   so rules/leaf selection and scoring match the analysis coding.
+#
+# UX CHANGE (2026-01):
+# - Removed Word report button + rendering (was failing on deploy)
+# - Removed "Next" button: answering a choice auto-advances
 
 library(shiny)
 library(shinyjs)
@@ -20,8 +22,6 @@ library(stringr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
-library(rmarkdown)
-library(knitr)
 
 set.seed(1234)
 
@@ -31,15 +31,12 @@ set.seed(1234)
 # APP DIR + FILE PICKER
 # ============================================================
 get_app_dir <- function() {
-  # Try to find the directory of the sourced app file
   for (i in rev(seq_len(sys.nframe()))) {
     of <- tryCatch(sys.frame(i)$ofile, error = function(e) NULL)
     if (!is.null(of) && nzchar(of)) return(dirname(normalizePath(of, winslash = "/")))
   }
-  # Shiny option (when runApp points to a directory)
   ad <- tryCatch(getShinyOption("appDir", NULL), error = function(e) NULL)
   if (!is.null(ad) && nzchar(ad)) return(normalizePath(ad, winslash = "/"))
-  # Fallback
   normalizePath(getwd(), winslash = "/")
 }
 
@@ -110,7 +107,6 @@ UI_TEXT <- list(
     subject_id   = "ID partecipante (opzionale):",
     select_msg   = "Seleziona una o più scale (per area):",
     start_btn    = "Inizia",
-    next_btn     = "Prosegui",
     exit_reset   = "Esci o ricomincia",
     done_title   = "Somministrazione completata",
     warn_select  = "Seleziona almeno una scala prima di iniziare.",
@@ -118,9 +114,8 @@ UI_TEXT <- list(
     begin_scale  = "Inizia questa sezione",
     end_page     = "Somministrazione terminata",
     close_page   = "Può ora chiudere questa pagina.",
-    dl_word      = "Scarica report Word",
     dl_csv       = "Scarica CSV risultati",
-    scores_ready = "Punteggi calcolati. Puoi scaricare il report Word.",
+    scores_ready = "Punteggi calcolati. Puoi scaricare il CSV risultati.",
     area_col     = "Area",
     group_col    = "Gruppo",
     scale_col    = "Scala",
@@ -142,7 +137,6 @@ UI_TEXT <- list(
     subject_id   = "Participant ID (optional):",
     select_msg   = "Select one or more scales (by area):",
     start_btn    = "Start",
-    next_btn     = "Next",
     exit_reset   = "Exit or restart",
     done_title   = "Assessment completed",
     warn_select  = "Select at least one scale before starting.",
@@ -150,9 +144,8 @@ UI_TEXT <- list(
     begin_scale  = "Start this section",
     end_page     = "Assessment ended",
     close_page   = "You can now close this page.",
-    dl_word      = "Download Word report",
     dl_csv       = "Download CSV results",
-    scores_ready = "Scores computed. You can download the Word report.",
+    scores_ready = "Scores computed. You can download the CSV results.",
     area_col     = "Area",
     group_col    = "Group",
     scale_col    = "Scale",
@@ -168,7 +161,7 @@ UI_TEXT <- list(
 txt <- function(lang, key) UI_TEXT[[lang]][[key]]
 
 # ============================================================
-# 7) RESPONSE CONFIG / INSTRUCTIONS
+# RESPONSE CONFIG / INSTRUCTIONS
 # ============================================================
 DEFAULT_CFG <- list(
   label        = NULL,
@@ -234,12 +227,15 @@ OVERRIDE_CFG <- list(
   RCA_Conflict_FS = list(label_it="Conflitti di ruolo", label_en="Role conflict", values=1:5, labels_it=FREQ5_IT, labels_en=FREQ5_EN,
                          instructions_it="Le affermazioni di seguito presentate descrivono alcune situazioni comuni nel lavoro. Per ciascuna di esse indichi l'opzione che meglio descrive la sua esperienza nel suo attuale lavoro.",
                          instructions_en="The statements below describe common situations at work. For each, select the option that best describes your experience in your current job."),
+  
   DIST_FS = list(label_it="Disturbi psicofisici", label_en="Psychophysical symptoms", values=1:4, labels_it=DIST4_IT, labels_en=DIST4_EN,
                  instructions_it="Negli ultimi 6 mesi, con quale frequenza le è capitato di avvertire ciascuno dei seguenti disturbi?",
                  instructions_en="Over the past 6 months, how often have you experienced each of the following symptoms?"),
+  
   DM_FS   = list(label_it="Disimpegno morale", label_en="Moral disengagement", values=1:5, labels_it=AGREE5_IT, labels_en=AGREE5_EN,
                  instructions_it="Pensando alla sua esperienza lavorativa, esprima il suo grado di accordo con le seguenti affermazioni.",
                  instructions_en="Thinking about your work experience, indicate your level of agreement with the following statements."),
+  
   JCQ_Control_FS = list(label_it="Controllo sul lavoro", label_en="Job control", values=1:4, labels_it=FREQ4_IT, labels_en=FREQ4_EN,
                         instructions_it="Le chiediamo di esprimere il suo parere su vari aspetti della sua vita lavorativa indicando quanto spesso le capitano le situazioni che sono riportate nelle righe seguenti.",
                         instructions_en="Please indicate your opinion about various aspects of your working life by reporting how often the situations below occur."),
@@ -249,18 +245,23 @@ OVERRIDE_CFG <- list(
   JCQ_Support_FS = list(label_it="Supporto sociale", label_en="Social support", values=1:4, labels_it=FREQ4_IT, labels_en=FREQ4_EN,
                         instructions_it="Indichi quanto spesso riceve il supporto descritto nelle affermazioni seguenti.",
                         instructions_en="Indicate how often you receive the support described in the following statements."),
+  
   SELF_EffLav_FS = list(label_it="Autoefficacia lavorativa", label_en="Work self-efficacy", values=1:7, labels_it=SELF_LABELS_7_IT, labels_en=SELF_LABELS_7_EN,
                         instructions_it="Le seguenti affermazioni descrivono comportamenti riferiti all’attività lavorativa. Indichi, per ognuna, quanto si sente capace di mettere in atto il comportamento descritto.",
                         instructions_en="The following statements describe work-related behaviors. For each, indicate how capable you feel of performing the described behavior."),
+  
   JDI_FS = list(label_it="Job Descriptive Index", label_en="Job Descriptive Index", values=c(0,1), labels_it=c("No","Sì"), labels_en=c("No","Yes"),
                 instructions_it="Pensi al suo lavoro in generale. Indichi \"Sì\" se la parola o frase descrive il suo lavoro nella maggior parte dei casi, \"No\" se non lo descrive.",
                 instructions_en="Think about your job in general. Mark \"Yes\" if the word/phrase describes your job most of the time, and \"No\" if it does not."),
+  
   CWB_O_FS = list(label_it="Comportamenti controproduttivi", label_en="Counterproductive behaviors", values=1:5, labels_it=FREQ5_IT, labels_en=FREQ5_EN,
                   instructions_it="Relativamente alle situazioni di seguito descritte indichi con quale frequenza si verificano nella sua attuale occupazione.",
                   instructions_en="For the situations described below, indicate how often they have occurred in your current job."),
+  
   IRRIT_FS = list(label_it="Irritabilità", label_en="Irritability", values=1:6, labels_it=IRRIT6_IT, labels_en=IRRIT6_EN,
                   instructions_it="Le affermazioni di seguito descrivono alcune situazioni comuni. Non esistono risposte “giuste” o “sbagliate”, la migliore risposta è quella immediata, spontanea. Legga attentamente ciascuna frase, decida se la frase per lei è vera o falsa, quindi selezioni l'opzione che meglio rispecchia la sua prima reazione.",
                   instructions_en="The statements below describe common situations. There are no right or wrong answers; the best response is your immediate, spontaneous one. Read each statement and select the option that best reflects your first reaction."),
+  
   NAQ_work_FS = list(label_it="Comportamenti negativi subiti", label_en="Negative acts experienced", values=1:5, labels_it=NAQ5_IT, labels_en=NAQ5_EN,
                      instructions_it="Le seguenti affermazioni descrivono comportamenti riferiti all’attività lavorativa. Legga attentamente ogni affermazione e indichi con quale frequenza ognuna di tali situazioni è accaduta nel suo attuale lavoro.",
                      instructions_en="The following statements describe work-related behaviors. For each statement, indicate how often each situation has occurred in your current job.")
@@ -328,6 +329,16 @@ scale_def <- function(lang, scale_fs) {
   else (SCALE_DEFS_IT[[scale_fs]] %||% "Definizione non disponibile.")
 }
 
+# --- remove duplicated "<label>:" from definition if present
+escape_regex <- function(x) gsub("([][{}()+*^$.|\\\\?])", "\\\\\\1", x)
+clean_definition <- function(def_text, label_text) {
+  if (is.null(def_text) || is.na(def_text) || !nzchar(def_text)) return(def_text)
+  if (is.null(label_text) || is.na(label_text) || !nzchar(label_text)) return(def_text)
+  lab_rx <- escape_regex(trimws(label_text))
+  rx <- paste0("^\\s*", lab_rx, "\\s*[:\\-–]\\s*")
+  sub(rx, "", def_text, ignore.case = TRUE, perl = TRUE)
+}
+
 # ============================================================
 # LOAD METADATA
 # ============================================================
@@ -345,7 +356,6 @@ META <- META %>%
   ) %>%
   arrange(order_area, order_group, order_scale)
 
-# If bilingual columns exist in file, keep them. Otherwise create them as copies.
 if (!"area_en"  %in% names(META)) META$area_en  <- META$area
 if (!"group_en" %in% names(META)) META$group_en <- META$group
 if (!"label_en" %in% names(META)) META$label_en <- META$label_it
@@ -398,8 +408,7 @@ parse_coef_str <- function(s) {
   vals <- suppressWarnings(as.numeric(rhs))
   keep <- !is.na(vals) & nm != ""
   if (!any(keep)) return(numeric(0))
-  vals <- vals[keep]
-  nm   <- nm[keep]
+  vals <- vals[keep]; nm <- nm[keep]
   names(vals) <- nm
   vals
 }
@@ -527,74 +536,6 @@ choose_best_leaf <- function(Leaves_sub) {
 }
 
 # ============================================================
-# REPORT TEMPLATE (bilingual via params$lang)
-# ============================================================
-report_template_text <- paste(
-  "---",
-  "title: \"LERS report\"",
-  "params:",
-  "  scores: !r data.frame(Area=character(), Group=character(), Scale=character(), Score=numeric())",
-  "  defs:  !r data.frame(Scale=character(), Definition=character())",
-  "  subject_id: \"\"",
-  "  lang: \"it\"",
-  "output:",
-  "  word_document:",
-  "    df_print: default",
-  "---",
-  "",
-  "```{r, echo=FALSE}",
-  "lang <- params$lang",
-  "t <- function(it, en) if (identical(lang, 'en')) en else it",
-  "```",
-  "",
-  "## `r t('Informazioni generali','General information')`",
-  "",
-  "**`r t('ID partecipante','Participant ID')`:** `r ifelse(nchar(params$subject_id)>0, params$subject_id, '—')`  ",
-  "**`r t('Data/ora report','Report date/time')`:** `r as.character(Sys.time())`",
-  "",
-  "## `r t('Come leggere i punteggi','How to read the scores')`",
-  "",
-  "`r t('I punteggi riportati sono **standardizzati** rispetto al campione di riferimento.','The reported scores are **standardized** with respect to the reference sample.')`",
-  "",
-  "- **0** = `r t('in linea con la media del campione','in line with the sample mean')`",
-  "- **+1 / −1** = `r t('leggermente sopra / sotto la media','slightly above / below the mean')`",
-  "- **+2 / −2** = `r t('nettamente sopra / sotto la media','clearly above / below the mean')`",
-  "",
-  "`r t('In generale, valori positivi indicano livelli più alti della caratteristica misurata e valori negativi livelli più bassi. Punteggi più lontani da 0 (in positivo o in negativo) indicano uno scostamento più marcato rispetto alla media del campione; da ±2 lo scostamento è da considerarsi rilevante.',",
-  "       'In general, positive values indicate higher levels of the measured characteristic and negative values indicate lower levels. Scores farther from 0 indicate larger deviations from the sample mean; values beyond ±2 should be considered meaningful.')`",
-  "",
-  "`r t('Per la dimensione **Autonomia**, punteggi più alti indicano **minore autonomia** (minore margine decisionale).','For the **Autonomy** dimension, higher scores indicate **lower autonomy** (less decision latitude).')`",
-  "",
-  "## `r t('Definizioni delle scale selezionate','Definitions of selected scales')`",
-  "",
-  "```{r, echo=FALSE, message=FALSE, warning=FALSE}",
-  "defs <- params$defs",
-  "if (is.data.frame(defs) && nrow(defs) > 0) {",
-  "  for (i in seq_len(nrow(defs))) {",
-  "    cat(paste0('* **', defs$Scale[i], '**: ', defs$Definition[i], '\\n'))",
-  "  }",
-  "} else {",
-  "  cat(t('Definizioni non disponibili.\\n','Definitions not available.\\n'))",
-  "}",
-  "```",
-  "",
-  "## `r t('Punteggi per scala','Scores by scale')`",
-  "",
-  "```{r, echo=FALSE, message=FALSE, warning=FALSE}",
-  "knitr::kable(params$scores, digits = 2)",
-  "library(ggplot2)",
-  "dat <- params$scores",
-  "dat$Scale <- factor(dat$Scale, levels = dat$Scale)",
-  "ggplot(dat, aes(x=Scale, y=Score, fill=Scale)) +",
-  "  geom_col() +",
-  "  theme_minimal(base_size=12) +",
-  "  labs(x=NULL, y=t('Punteggio stimato','Estimated score')) +",
-  "  theme(legend.position='none', axis.text.x = element_text(angle=45, hjust=1))",
-  "```",
-  sep = "\n"
-)
-
-# ============================================================
 # SCALES AVAILABLE (intersection META, LEAF, RULES)
 # + keep only SELF_EffLav_FS inside Autoefficacia
 # ============================================================
@@ -613,7 +554,6 @@ ui <- fluidPage(
   useShinyjs(),
   tags$head(tags$style(HTML("
     .btn-choice { margin:6px; padding:10px 16px; font-size:16px; }
-    .btn-next   { margin-top:12px; }
     .panel-instructions { background:#f8f9fa; }
     .results-box { background:#fafafa; padding:12px; border-radius:8px; border:1px solid #e5e5e5; }
     .centered { text-align:center; }
@@ -646,13 +586,8 @@ server <- function(input, output, session) {
   
   lang <- reactiveVal(NULL)
   
-  observeEvent(input$choose_it, {
-    lang("it"); hide("page_language"); show("page_setup")
-  }, ignoreInit = TRUE)
-  
-  observeEvent(input$choose_en, {
-    lang("en"); hide("page_language"); show("page_setup")
-  }, ignoreInit = TRUE)
+  observeEvent(input$choose_it, { lang("it"); hide("page_language"); show("page_setup") }, ignoreInit = TRUE)
+  observeEvent(input$choose_en, { lang("en"); hide("page_language"); show("page_setup") }, ignoreInit = TRUE)
   
   output$page_setup_ui <- renderUI({
     req(lang())
@@ -688,9 +623,7 @@ server <- function(input, output, session) {
                br(),
                uiOutput("buttons"),
                br(),
-               actionButton("next_btn", txt(L, "next_btn"), class="btn btn-success btn-next"),
-               actionButton("exit_or_reset_mid", txt(L, "exit_reset"), class="btn btn-secondary",
-                            style="margin-left:8px;")
+               actionButton("exit_or_reset_mid", txt(L, "exit_reset"), class="btn btn-secondary")
         )
       )
     )
@@ -708,8 +641,6 @@ server <- function(input, output, session) {
         column(6,
                div(class="results-box", tableOutput("mini_table")),
                br(),
-               uiOutput("download_ui"),
-               br(),
                downloadButton("dl_csv", txt(L, "dl_csv")),
                br(), br(),
                actionButton("exit_or_reset_bottom", txt(L, "exit_reset"), class="btn btn-secondary")
@@ -725,7 +656,7 @@ server <- function(input, output, session) {
     fluidRow(column(12, h3(txt(L, "end_page")), p(txt(L, "close_page"))))
   })
   
-  # --- selection scales by area (safe, uses meta area/area_en)
+  # --- selection scales by area
   output$area_select_ui <- renderUI({
     req(lang())
     L <- lang()
@@ -777,7 +708,6 @@ server <- function(input, output, session) {
   Leaves_current <- reactiveVal(NULL)
   answers <- reactiveVal(list())
   asked   <- reactiveVal(character())
-  pending_choice <- reactiveVal(NULL)
   
   results_scores <- reactiveVal(
     data.frame(Scala=character(), Punteggio=numeric(), leaf_id=integer(),
@@ -802,8 +732,6 @@ server <- function(input, output, session) {
     Leaves_current(df_rules)
     answers(list())
     asked(character())
-    pending_choice(NULL)
-    enable("next_btn")
     
     g_cur  <- get_scale_group(fs)
     g_prev <- last_group()
@@ -910,6 +838,12 @@ server <- function(input, output, session) {
     h3(txtq)
   })
   
+  values_reactive <- reactive({
+    fs <- current_scale_fs()
+    if (is.null(fs)) return(DEFAULT_CFG$values)
+    get_scale_cfg(fs, lang())$values
+  })
+  
   output$buttons <- renderUI({
     if (isTRUE(in_intro())) return(NULL)
     fs <- current_scale_fs()
@@ -923,31 +857,10 @@ server <- function(input, output, session) {
     
     btns <- lapply(seq_len(k), function(i) {
       lab <- if (!is.null(labs) && length(labs) >= i) labs[[i]] else as.character(vals[[i]])
-      cls <- "btn-choice btn btn-primary"
-      if (!is.null(pending_choice()) && identical(pending_choice(), vals[[i]])) cls <- "btn-choice btn btn-primary active"
-      actionButton(paste0("resp_", i), lab, class = cls)
+      actionButton(paste0("resp_", i), lab, class = "btn-choice btn btn-primary")
     })
     do.call(tagList, btns)
   })
-  
-  values_reactive <- reactive({
-    fs <- current_scale_fs()
-    if (is.null(fs)) return(DEFAULT_CFG$values)
-    get_scale_cfg(fs, lang())$values
-  })
-  
-  for (j in 1:7) {
-    local({
-      idx <- j
-      observeEvent(input[[paste0("resp_", idx)]], {
-        if (isTRUE(in_intro())) return()
-        vals <- values_reactive()
-        if (length(vals) < idx) return()
-        pending_choice(vals[[idx]])
-        enable("next_btn")
-      })
-    })
-  }
   
   # ============================================================
   # FIX HELPERS: reverse-coding for scales (IRRIT_FS)
@@ -955,13 +868,9 @@ server <- function(input, output, session) {
   REVERSE_CODE_SCALES <- c("IRRIT_FS")
   
   reverse_code_value <- function(val, values_vec) {
-    # Reverse by position in values_vec (robust even if values aren't 1..k)
     if (is.null(values_vec) || !length(values_vec) || is.null(val) || !is.finite(val)) return(val)
     pos <- match(val, values_vec)
-    if (!is.na(pos)) {
-      return(rev(values_vec)[pos])
-    }
-    # fallback: numeric flip (works for contiguous numeric scales)
+    if (!is.na(pos)) return(rev(values_vec)[pos])
     mn <- suppressWarnings(min(values_vec, na.rm = TRUE))
     mx <- suppressWarnings(max(values_vec, na.rm = TRUE))
     if (is.finite(mn) && is.finite(mx)) return((mx + mn) - val)
@@ -1013,10 +922,12 @@ server <- function(input, output, session) {
     }
   }
   
-  observeEvent(input$next_btn, {
+  # --- Process a chosen response and auto-advance (NO NEXT BUTTON)
+  process_response <- function(choice_index) {
     if (isTRUE(in_intro())) return()
+    
     fs <- current_scale_fs()
-    req(!is.null(fs))
+    if (is.null(fs)) return()
     
     v <- next_var()
     if (is.na(v)) {
@@ -1024,22 +935,20 @@ server <- function(input, output, session) {
       return()
     }
     
-    sel <- pending_choice()
-    req(!is.null(sel))
+    vals <- values_reactive()
+    if (length(vals) < choice_index) return()
     
-    # --- SAVE ANSWER (with reverse-coding fix for IRRIT_FS) ---
-    sel_num <- as.numeric(sel)
+    sel_num <- as.numeric(vals[[choice_index]])
+    
+    # reverse-code if needed (IRRIT_FS)
     if (identical(fs, "IRRIT_FS") && fs %in% REVERSE_CODE_SCALES && is.finite(sel_num)) {
-      sel_num <- reverse_code_value(sel_num, values_reactive())
+      sel_num <- reverse_code_value(sel_num, vals)
     }
     
     a <- answers()
     a[[v]] <- sel_num
     answers(a)
     asked(c(asked(), v))
-    
-    pending_choice(NULL)
-    disable("next_btn")
     
     L_now <- Leaves_now()
     if (is.null(L_now) || nrow(L_now) == 0) {
@@ -1048,7 +957,16 @@ server <- function(input, output, session) {
     }
     
     if (is.na(next_var())) finalize_current_scale()
-  })
+  }
+  
+  for (j in 1:7) {
+    local({
+      idx <- j
+      observeEvent(input[[paste0("resp_", idx)]], {
+        process_response(idx)
+      }, ignoreInit = TRUE)
+    })
+  }
   
   output$results_text <- renderUI({
     res <- results_scores()
@@ -1125,7 +1043,8 @@ server <- function(input, output, session) {
         h4(if (L=="en") "Definitions of selected scales" else "Definizioni delle scale selezionate"),
         tags$ul(lapply(seq_len(nrow(df)), function(i) {
           lab <- if (L=="en") (df$label_en[i] %||% df$label_it[i]) else df$label_it[i]
-          dfn <- scale_def(L, df$scale_FS[i])
+          dfn_raw <- scale_def(L, df$scale_FS[i])
+          dfn <- clean_definition(dfn_raw, lab)
           tags$li(tags$b(lab), ": ", dfn)
         }))
     )
@@ -1170,78 +1089,6 @@ server <- function(input, output, session) {
       theme(legend.position = "none",
             axis.text.x = element_text(angle = 45, hjust = 1))
   })
-  
-  output$download_ui <- renderUI({
-    req(lang())
-    L <- lang()
-    if (input$mode != "single") return(NULL)
-    downloadButton("dl_report_docx", txt(L, "dl_word"))
-  })
-  
-  report_data <- reactive({
-    res <- results_scores()
-    req(nrow(res) > 0)
-    L <- lang()
-    
-    res %>%
-      left_join(META_AV %>% select(scale_FS, area, area_en, group, group_en, label_it, label_en, order_area, order_group, order_scale),
-                by = c("Scala" = "scale_FS")) %>%
-      transmute(
-        Area  = if (L=="en") area_en else area,
-        Group = if (L=="en") group_en else group,
-        Scale = if (L=="en") coalesce(label_en, label_it) else label_it,
-        Score = as.numeric(Punteggio),
-        oa = order_area, og = order_group, os = order_scale
-      ) %>%
-      arrange(oa, og, os) %>%
-      select(-oa, -og, -os)
-  })
-  
-  report_defs <- reactive({
-    res <- results_scores()
-    req(nrow(res) > 0)
-    L <- lang()
-    
-    df <- res %>%
-      select(Scala) %>% distinct() %>%
-      left_join(META_AV %>% select(scale_FS, label_it, label_en, order_area, order_group, order_scale),
-                by = c("Scala" = "scale_FS")) %>%
-      arrange(order_area, order_group, order_scale)
-    
-    lab <- if (L=="en") coalesce(df$label_en, df$label_it) else df$label_it
-    defs <- vapply(df$Scala, function(sfs) scale_def(L, sfs), character(1))
-    
-    data.frame(Scale = lab, Definition = defs, stringsAsFactors = FALSE)
-  })
-  
-  output$dl_report_docx <- downloadHandler(
-    filename = function() {
-      id <- if (nzchar(input$subject_id)) input$subject_id else "report"
-      paste0("report_", id, ".docx")
-    },
-    content = function(file) {
-      dat  <- report_data()
-      defs <- report_defs()
-      params_list <- list(scores = dat, defs = defs, subject_id = input$subject_id, lang = lang())
-      
-      tpl <- tempfile(fileext = ".Rmd")
-      cat(report_template_text, file = tpl)
-      
-      tmpdir <- tempdir()
-      outfile <- file.path(tmpdir, "report.docx")
-      
-      rmarkdown::render(
-        input         = tpl,
-        output_format = "word_document",
-        output_file   = basename(outfile),
-        output_dir    = tmpdir,
-        params        = params_list,
-        envir         = new.env(parent = globalenv()),
-        quiet         = TRUE
-      )
-      file.copy(outfile, file, overwrite = TRUE)
-    }
-  )
   
   output$dl_csv <- downloadHandler(
     filename = function() {
@@ -1295,7 +1142,6 @@ server <- function(input, output, session) {
     Leaves_current(NULL)
     answers(list())
     asked(character())
-    pending_choice(NULL)
     in_intro(TRUE)
     results_scores(data.frame(Scala=character(), Punteggio=numeric(), leaf_id=integer(),
                               n_items_asked=integer(), stringsAsFactors = FALSE))
