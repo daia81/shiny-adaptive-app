@@ -7,7 +7,9 @@ install.packages(
     "stringr",
     "tidyr",
     "tibble",
-    "ggplot2"
+    "ggplot2",
+    "httr",
+    "jsonlite"
   ),
   repos = "https://cloud.r-project.org",
   Ncpus = max(1L, parallel::detectCores())
