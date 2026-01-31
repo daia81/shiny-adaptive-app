@@ -632,28 +632,42 @@ server <- function(input, output, session) {
     if (L == "en") {
       shiny::div(
         class = "results-box",
-        shiny::h4("How to share the participant link"),
-        shiny::tags$p("Select the scales and click Generate link."),
-        shiny::tags$p("Copy the link and send it to participants (email/WhatsApp) or paste it into your survey platform."),
-        shiny::tags$p("To save results, enter a URL in the Webhook field (e.g., Google Sheet via Apps Script)."),
-        shiny::tags$p("If the Webhook field is empty, data are not saved reliably (the system may restart and files can be lost)."),
-        shiny::tags$p(shiny::HTML("&#10145;&#65039; Therefore: for batch collection, using a Webhook is strongly recommended.")),
-        shiny::tags$p(shiny::HTML("Example (Google Sheet): paste the Apps Script Web App URL that ends with <code>/exec</code>.")),
+        shiny::h4("How to share the link with participants"),
+        shiny::tags$ol(
+          shiny::tags$li("Select the scales and click ", shiny::tags$b("Generate link"), "."),
+          shiny::tags$li("Copy the link and send it to participants (email/WhatsApp) or paste it into your survey platform.")
+        ),
         shiny::tags$hr(),
-        shiny::tags$p("To include the selected scales in an existing survey (e.g., Qualtrics), use Link Out / Redirect (External URL) and paste the generated link.")
+        shiny::h4("Data saving (IMPORTANT)"),
+        shiny::tags$ul(
+          shiny::tags$li("To save results, paste a URL in the ", shiny::tags$b("Webhook"), " field (e.g., Google Sheet via Apps Script)."),
+          shiny::tags$li("If the Webhook field is empty, data are not saved reliably (the server may restart and files may be lost)."),
+          shiny::tags$li(shiny::tags$b("➡️ For batch collection it is strongly recommended to use the Webhook.")),
+          shiny::tags$li("Example (Google Sheet): paste the Apps Script Web App URL that ends with ", shiny::tags$code("/exec"), ".")
+        ),
+        shiny::tags$hr(),
+        shiny::h4("To include the scales inside an existing survey (e.g., Qualtrics)"),
+        shiny::p("Use ", shiny::tags$b("Link Out / Redirect (External URL)"), " and paste the generated link.")
       )
     } else {
       shiny::div(
         class = "results-box",
         shiny::h4("Come condividere il link con i partecipanti"),
-        shiny::tags$p("Selezionare le scale e cliccare Genera link."),
-        shiny::tags$p("Copiare il link e inviarlo ai partecipanti (email/WhatsApp) oppure incollarlo nella piattaforma di survey."),
-        shiny::tags$p("Per salvare i risultati, inserire un URL nel campo Webhook (es. Google Sheet via Apps Script)."),
-        shiny::tags$p("Se il campo Webhook è vuoto, i dati non vengono salvati in modo affidabile (il sistema può riavviarsi e i file possono andare persi)."),
-        shiny::tags$p(shiny::HTML("&#10145;&#65039; Quindi: per la raccolta massiva è fortemente consigliato usare il Webhook.")),
-        shiny::tags$p(shiny::HTML("Esempio (Google Sheet): incollare l’URL della Web App di Apps Script che termina con <code>/exec</code>.")),
+        shiny::tags$ol(
+          shiny::tags$li("Selezionare le scale e cliccare ", shiny::tags$b("Genera link"), "."),
+          shiny::tags$li("Copiare il link e inviarlo ai partecipanti (email/WhatsApp) oppure incollarlo nella piattaforma di survey.")
+        ),
         shiny::tags$hr(),
-        shiny::tags$p("Per includere le scale selezionate in una survey già esistente (es. Qualtrics), usare Link Out / Redirect (External URL) e incollare il link generato.")
+        shiny::h4("Salvataggio dei dati (IMPORTANTE)"),
+        shiny::tags$ul(
+          shiny::tags$li("Per salvare i risultati, inserire un URL nel campo ", shiny::tags$b("Webhook"), " (es. Google Sheet via Apps Script)."),
+          shiny::tags$li("Se il campo Webhook è vuoto, i dati non vengono salvati in modo affidabile (il server può riavviarsi e i file possono andare persi)."),
+          shiny::tags$li(shiny::tags$b("➡️ Quindi: per la raccolta massiva è fortemente consigliato usare il Webhook.")),
+          shiny::tags$li("Esempio (Google Sheet): incollare l’URL della Web App di Apps Script che termina con ", shiny::tags$code("/exec"), ".")
+        ),
+        shiny::tags$hr(),
+        shiny::h4("Per includere le scale selezionate in una survey già esistente (es. Qualtrics)"),
+        shiny::p("Usare ", shiny::tags$b("Link Out / Redirect (External URL)"), " e incollare il link generato.")
       )
     }
   })
