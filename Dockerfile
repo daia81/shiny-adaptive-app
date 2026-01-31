@@ -1,10 +1,13 @@
 FROM rocker/r-ver:4.3.2
 
-# System libs (robust for many R packages)
+# System libs for compiling Shiny/httpuv + common deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     libcurl4-openssl-dev \
     libssl-dev \
     libxml2-dev \
+    libuv1-dev \
+    zlib1g-dev \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
