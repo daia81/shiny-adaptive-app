@@ -4,6 +4,9 @@
 # - Reverse-coding item-by-item from dictionary column: reverse
 # - Single mode shows interpretation box
 # - No scale acronyms shown in UI (only labels)
+# - Scale definitions under each checkbox (DEF_IT / DEF_EN)
+# - Fix duplicated factor level in plot (make.unique)
+# - Robust scale selection via per-scale checkbox inputs
 
 suppressPackageStartupMessages({
   library(shiny)
@@ -55,25 +58,25 @@ pick_xlsx <- function(candidates, pattern_fallback = NULL, label = "File") {
 # FILES (same folder as app)
 # ============================================================
 RULES_XLSX <- pick_xlsx(
-  c("LERS_summary_scales5.xlsx"),
+  c("LERS_summary_scales6.xlsx"),
   pattern_fallback = "LERS_.*summary.*scales.*\\.(xlsx|xlsm|xls)$",
   label = "File regole"
 )
 
 LEAF_INFO_XLSX <- pick_xlsx(
-  c("leaf_local_regressions_LERS_shrink5.xlsx"),
+  c("leaf_local_regressions_LERS_shrink6.xlsx"),
   pattern_fallback = "leaf_local_regressions.*\\.(xlsx|xlsm|xls)$",
   label = "File leaf"
 )
 
 DICT_XLSX <- pick_xlsx(
-  c("dictionary_scale_items5.xlsx"),
+  c("dictionary_scale_items6.xlsx"),
   pattern_fallback = "dictionary.*items.*\\.(xlsx|xlsm|xls)$",
   label = "File dizionario"
 )
 
 META_XLSX <- pick_xlsx(
-  c("scale_metadata_LERS5.xlsx"),
+  c("scale_metadata_LERS6.xlsx"),
   pattern_fallback = "scale_metadata.*\\.(xlsx|xlsm|xls)$",
   label = "File metadata"
 )
@@ -139,7 +142,6 @@ UI_TEXT <- list(
     scales_selected = "Selected scales:"
   )
 )
-
 txt <- function(lang, key) UI_TEXT[[lang]][[key]]
 
 # ============================================================
@@ -259,6 +261,10 @@ META <- META %>%
 if (!"area_en"  %in% names(META)) META$area_en  <- META$area
 if (!"group_en" %in% names(META)) META$group_en <- META$group
 if (!"label_en" %in% names(META)) META$label_en <- META$label_it
+
+# definitions (DEF_IT / DEF_EN)
+if (!"DEF_IT" %in% names(META)) META$DEF_IT <- ""
+if (!"DEF_EN" %in% names(META)) META$DEF_EN <- META$DEF_IT
 
 # ============================================================
 # LOAD DICTIONARY (IT + optional EN + reverse)
@@ -446,7 +452,8 @@ META_AV <- META %>%
   filter(scale_FS %in% unique(LEAF_RAW$scale_FS)) %>%
   filter(paste0("rules_", sub("_FS$","", scale_FS)) %in% rule_sheets) %>%
   arrange(order_area, order_group, order_scale) %>%
-  filter(!(group == "Autoefficacia" & scale_FS != "SELF_EffLav_FS"))
+  filter(!(group == "Autoefficacia" & scale_FS != "SELF_EffLav_FS")) %>%
+  as_tibble()
 
 # ============================================================
 # Helpers
@@ -507,14 +514,13 @@ ui <- fluidPage(
       .box { background:#ffffff; padding:18px; border-radius:10px; border:1px solid #e5e5e5; }
       .center { text-align:center; }
       .btn-big { margin:10px; padding:12px 22px; font-size:18px; }
-      .muted { color:#666; }
+      .muted { color:#666; font-size:12px; }
       .instr { background:#f5f7fb; padding:10px 14px; border-radius:8px; margin-bottom:12px; }
       .qbox { padding:12px; border-radius:10px; border:1px solid #eee; background:#fafafa; }
       .choice { margin:6px; }
       .linkbox { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background:#f6f8fa; padding:10px; border-radius:8px; border:1px solid #e1e4e8; }
       .results-box { background:#f8f9fa; padding:14px 16px; border-radius:10px; border:1px solid #e5e5e5; margin:12px 0; }
 
-      /* Buttons in one row, compact (no slider) */
       .choices-row {
         display: flex;
         flex-wrap: nowrap;
@@ -532,32 +538,32 @@ ui <- fluidPage(
     "))
   ),
   
-  div(id="page_language", class="box", style="max-width:680px; margin:40px auto;",
-      h3("Seleziona la lingua / Select language"),
-      div(class="center",
-          actionButton("choose_it", "ITALIANO", class="btn btn-primary btn-big"),
-          actionButton("choose_en", "ENGLISH", class="btn btn-primary btn-big")
-      )
+  shiny::div(id="page_language", class="box", style="max-width:680px; margin:40px auto;",
+             shiny::h3("Seleziona la lingua / Select language"),
+             shiny::div(class="center",
+                        actionButton("choose_it", "ITALIANO", class="btn btn-primary btn-big"),
+                        actionButton("choose_en", "ENGLISH", class="btn btn-primary btn-big")
+             )
   ),
   
-  hidden(div(id="page_mode", class="box", style="max-width:860px; margin:30px auto;",
-             uiOutput("ui_mode")
+  hidden(shiny::div(id="page_mode", class="box", style="max-width:860px; margin:30px auto;",
+                    uiOutput("ui_mode")
   )),
   
-  hidden(div(id="page_setup", class="box", style="max-width:980px; margin:20px auto;",
-             uiOutput("ui_setup")
+  hidden(shiny::div(id="page_setup", class="box", style="max-width:980px; margin:20px auto;",
+                    uiOutput("ui_setup")
   )),
   
-  hidden(div(id="page_questions", class="box", style="max-width:980px; margin:20px auto;",
-             uiOutput("ui_questions")
+  hidden(shiny::div(id="page_questions", class="box", style="max-width:980px; margin:20px auto;",
+                    uiOutput("ui_questions")
   )),
   
-  hidden(div(id="page_results", class="box", style="max-width:980px; margin:20px auto;",
-             uiOutput("ui_results")
+  hidden(shiny::div(id="page_results", class="box", style="max-width:980px; margin:20px auto;",
+                    uiOutput("ui_results")
   )),
   
-  hidden(div(id="page_exit", class="box", style="max-width:780px; margin:30px auto;",
-             uiOutput("ui_exit")
+  hidden(shiny::div(id="page_exit", class="box", style="max-width:780px; margin:30px auto;",
+                    uiOutput("ui_exit")
   ))
 )
 
@@ -566,7 +572,6 @@ ui <- fluidPage(
 # ============================================================
 server <- function(input, output, session) {
   
-  # ---- read URL params (for participant link)
   query <- reactive({
     parseQueryString(session$clientData$url_search %||% "")
   })
@@ -574,17 +579,14 @@ server <- function(input, output, session) {
   lang <- reactiveVal(NULL)
   mode <- reactiveVal(NULL)   # "single" | "builder" | "participant"
   
-  # participant config from URL
   participant_scales <- reactiveVal(character())
   participant_require_id <- reactiveVal(FALSE)
   participant_show_results <- reactiveVal(TRUE)
   participant_webhook <- reactiveVal(NULL)
   
-  # ---- language selection
   observeEvent(input$choose_it, { lang("it"); hide("page_language"); show("page_mode") }, ignoreInit = TRUE)
   observeEvent(input$choose_en, { lang("en"); hide("page_language"); show("page_mode") }, ignoreInit = TRUE)
   
-  # ---- mode UI
   output$ui_mode <- renderUI({
     req(lang())
     L <- lang()
@@ -601,7 +603,6 @@ server <- function(input, output, session) {
   observeEvent(input$go_single,  { mode("single");  hide("page_mode"); show("page_setup") }, ignoreInit = TRUE)
   observeEvent(input$go_builder, { mode("builder"); hide("page_mode"); show("page_setup") }, ignoreInit = TRUE)
   
-  # ---- participant link (bypass)
   observe({
     q <- query()
     if (!is.null(q[["participant"]]) && q[["participant"]] %in% c("1","true","TRUE")) {
@@ -623,7 +624,7 @@ server <- function(input, output, session) {
   })
   
   # ============================================================
-  # BUILDER HELP (embed instructions) — defined ONCE
+  # BUILDER HELP
   # ============================================================
   output$builder_embed_help <- renderUI({
     req(lang())
@@ -673,43 +674,75 @@ server <- function(input, output, session) {
   })
   
   # ============================================================
-  # selection scales by area (single & builder)
+  # SCALE SELECTION UI (ROBUST FIX)
   # ============================================================
   output$area_select_ui <- renderUI({
     req(lang())
     L <- lang()
+    
     area_col  <- if (L == "en") "area_en" else "area"
     label_col <- if (L == "en") "label_en" else "label_it"
+    def_col   <- if (L == "en") "DEF_EN"  else "DEF_IT"
     
-    areas <- unique(META_AV[[area_col]])
+    # ensure we have a data.frame-like object
+    mdf <- as.data.frame(META_AV, stringsAsFactors = FALSE)
+    
+    if (!area_col %in% names(mdf)) return(NULL)
+    
+    areas <- unique(mdf[[area_col]])
     areas <- areas[!is.na(areas) & nzchar(areas)]
     
     shiny::tagList(lapply(areas, function(a) {
-      subdf <- META_AV %>% filter(.data[[area_col]] == a) %>% arrange(order_group, order_scale)
-      labs <- subdf[[label_col]]
-      labs <- ifelse(is.na(labs) | !nzchar(labs), subdf$label_it, labs)
-      choices <- setNames(subdf$scale_FS, labs)
+      
+      # base subsetting => always a data.frame (fixes $ on atomic vectors)
+      subdf <- mdf[mdf[[area_col]] == a, , drop = FALSE]
+      if (nrow(subdf) == 0) return(NULL)
+      
+      # keep ordering
+      subdf <- subdf[order(subdf[["order_group"]], subdf[["order_scale"]]), , drop = FALSE]
       
       a_label <- a
       if (L == "it") a_label <- sub("^Domande\\s+", "Richieste ", a_label)
-      else           a_label <- sub("^Questions\\s+", "Requests ", a_label)
+      else          a_label <- sub("^Questions\\s+", "Requests ", a_label)
       
-      checkboxGroupInput(
-        inputId = paste0("sel_", make.names(a)),
-        label   = shiny::tags$strong(a_label),
-        choices = choices
+      items_ui <- lapply(seq_len(nrow(subdf)), function(i) {
+        fs   <- as.character(subdf[["scale_FS"]][i])
+        
+        lbl  <- subdf[[label_col]][i]
+        if (is.na(lbl) || !nzchar(lbl)) lbl <- subdf[["label_it"]][i]
+        lbl <- as.character(lbl)
+        
+        defn <- ""
+        if (def_col %in% names(subdf)) defn <- subdf[[def_col]][i]
+        defn <- ifelse(is.na(defn), "", as.character(defn))
+        
+        id <- paste0("chk_", make.names(fs))
+        
+        shiny::div(
+          style="padding:8px 6px; border-bottom:1px solid #eee;",
+          checkboxInput(id, label = lbl, value = FALSE),
+          if (nzchar(defn)) shiny::div(class="muted", style="margin-left:26px; margin-top:-6px;", defn) else NULL
+        )
+      })
+      
+      shiny::div(
+        style="margin-bottom:14px;",
+        shiny::tags$strong(a_label),
+        shiny::div(style="margin-top:6px; border:1px solid #eee; border-radius:10px; padding:6px 10px;",
+                   do.call(shiny::tagList, items_ui)
+        )
       )
     }))
   })
   
+  # read selected scales from per-scale checkboxes
   get_selected_scales_from_ui <- reactive({
-    req(lang())
-    L <- lang()
-    area_col <- if (L == "en") "area_en" else "area"
-    areas <- unique(META_AV[[area_col]])
-    areas <- areas[!is.na(areas) & nzchar(areas)]
-    picks <- unlist(lapply(areas, function(a) input[[paste0("sel_", make.names(a))]]))
-    picks <- unique(picks[!is.na(picks) & nzchar(picks)])
+    picks <- character(0)
+    for (fs in META_AV$scale_FS) {
+      id <- paste0("chk_", make.names(fs))
+      if (isTRUE(input[[id]])) picks <- c(picks, fs)
+    }
+    picks <- unique(picks)
     META_AV %>%
       filter(scale_FS %in% picks) %>%
       arrange(order_area, order_group, order_scale) %>%
@@ -756,7 +789,6 @@ server <- function(input, output, session) {
       
       show_id <- isTRUE(participant_require_id())
       
-      # show scale labels (no FS)
       sc_labels <- META_AV %>%
         filter(scale_FS %in% sc) %>%
         arrange(order_area, order_group, order_scale) %>%
@@ -777,7 +809,6 @@ server <- function(input, output, session) {
       )
       
     } else {
-      # single
       shiny::div(
         shiny::h3(txt(L, "title")),
         textInput("subject_id", txt(L, "subject_id"), ""),
@@ -792,7 +823,6 @@ server <- function(input, output, session) {
     }
   })
   
-  # Builder link output
   output$builder_link_ui <- renderUI({
     req(lang(), mode())
     if (mode() != "builder") return(NULL)
@@ -1052,7 +1082,6 @@ server <- function(input, output, session) {
     
     sel_num <- as.numeric(vals[[choice_index]])
     
-    # reverse-code ONLY if flagged in dictionary
     if (is_item_reverse(fs, v) && is.finite(sel_num)) {
       sel_num <- reverse_code_value(sel_num, vals)
     }
@@ -1086,10 +1115,13 @@ server <- function(input, output, session) {
   start_assessment <- function(scales_vec) {
     req(lang())
     L <- lang()
+    
+    scales_vec <- unique(scales_vec)
     if (length(scales_vec) == 0) {
       showModal(modalDialog(title=if (L=="en") "Warning" else "Attenzione", txt(L,"warn_select"), easyClose=TRUE))
       return()
     }
+    
     selected_scales(scales_vec)
     current_scale_index(1L)
     last_group(NA_character_)
@@ -1185,7 +1217,6 @@ server <- function(input, output, session) {
     }
   })
   
-  # TABLE: no acronyms shown
   output$mini_table <- renderTable({
     res <- results_scores()
     if (nrow(res) == 0) return(NULL)
@@ -1212,10 +1243,14 @@ server <- function(input, output, session) {
       left_join(META_AV %>% select(scale_FS, label_it, label_en, order_area, order_group, order_scale),
                 by = "scale_FS") %>%
       arrange(order_area, order_group, order_scale)
-    dd$label <- if (L=="en") ifelse(is.na(dd$label_en) | !nzchar(dd$label_en), dd$label_it, dd$label_en) else dd$label_it
-    dd$label <- factor(dd$label, levels = dd$label)
     
-    ggplot(dd, aes(x = label, y = score, fill = label)) +
+    dd$label <- if (L=="en") ifelse(is.na(dd$label_en) | !nzchar(dd$label_en), dd$label_it, dd$label_en) else dd$label_it
+    
+    # FIX: avoid duplicated factor levels
+    dd$label_plot <- make.unique(dd$label)
+    dd$label_plot <- factor(dd$label_plot, levels = dd$label_plot)
+    
+    ggplot(dd, aes(x = label_plot, y = score, fill = scale_FS)) +
       geom_col() +
       theme_minimal(base_size = 12) +
       labs(x=NULL, y="Score") +
@@ -1234,7 +1269,6 @@ server <- function(input, output, session) {
       if (nrow(res) == 0) return()
       L <- lang()
       
-      # CSV keeps scale_FS for analysis
       out <- res %>%
         left_join(META_AV %>% select(scale_FS, area, area_en, group, group_en, label_it, label_en),
                   by = "scale_FS") %>%
