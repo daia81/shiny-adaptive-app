@@ -213,7 +213,7 @@ OVERRIDE_CFG <- list(
   JCQ_Demand_FS  = list(values=1:4, labels_it=FREQ4_IT, labels_en=FREQ4_EN,
                         instructions_it="Indichi quanto spesso le capitano le situazioni indicate.",
                         instructions_en="Indicate how often the situations occur."),
-  JCQ_Support_FS = list(values=1:4, labels_it=FREQ4_IT, labels_en=FREQ4_EN,
+  JCQ_Support_FS = list(values=1:5, labels_it=FREQ5_IT, labels_en=FREQ5_EN,
                         instructions_it="Indichi quanto spesso riceve il supporto descritto.",
                         instructions_en="Indicate how often you receive the support described."),
   SELF_EffLav_FS = list(values=1:7, labels_it=SELF_LABELS_7_IT, labels_en=SELF_LABELS_7_EN,
